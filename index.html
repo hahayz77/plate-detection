@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reconhecimento de Placas Veiculares (YOLO + CRNN/CTC)</title>
+  <!-- ONNX Runtime Web via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --border-color: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0284c7;
+      --plate-border: #1e40af;
+      --plate-bg: #ffffff;
+      --plate-text: #000000;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --error: #ef4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 0.5rem;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #fff;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .status-panel {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.95rem;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background-color: var(--warning);
+      animation: pulse 1.5s infinite;
+    }
+
+    .dot.ready {
+      background-color: var(--success);
+      animation: none;
+    }
+
+    .dot.error {
+      background-color: var(--error);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .main-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 850px) {
+      .main-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .canvas-container {
+      width: 100%;
+      background: #020617;
+      border: 1px dashed var(--border-color);
+      border-radius: 0.5rem;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 400px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    canvas {
+      max-width: 100%;
+      height: auto;
+      object-fit: contain;
+      display: block;
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--accent);
+      background: rgba(56, 189, 248, 0.03);
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .upload-zone:hover {
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    .result-section {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .mercosul-plate-card {
+      background: var(--plate-bg);
+      border-radius: 6px;
+      border: 3px solid #1e40af;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+      width: 100%;
+      max-width: 320px;
+      margin: 0 auto;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .mercosul-header {
+      background: #1e40af;
+      color: #ffffff;
+      padding: 4px 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .mercosul-flag {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+    }
+
+    .mercosul-body {
+      padding: 12px 15px;
+      text-align: center;
+      background: #ffffff;
+    }
+
+    .plate-text {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: var(--plate-text);
+      line-height: 1.1;
+      text-transform: uppercase;
+      word-break: break-all;
+    }
+
+    .plate-text.empty {
+      color: #94a3b8;
+      font-size: 1.2rem;
+      letter-spacing: normal;
+    }
+
+    .cropped-preview {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    #cropCanvas {
+      max-height: 56px;
+      background: #000;
+      border-radius: 4px;
+      border: 1px solid var(--border-color);
+    }
+
+    .logs-panel {
+      background: #090d16;
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: #38bdf8;
+      max-height: 160px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Detector de Placas & OCR Client-side</h1>
+      <p class="subtitle">ONNX Runtime Web (Wasm) &bull; YOLOv8 Detection &bull; CRNN + CTC Greedy Search</p>
+    </header>
+
+    <!-- Barra de Status com inicialização automática -->
+    <div class="status-panel">
+      <div class="status-indicator">
+        <div id="statusDot" class="dot"></div>
+        <span id="statusText">Inicializando WebAssembly e carregando modelos ONNX...</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <input type="file" id="modelFileInput" multiple accept=".onnx" style="display: none;">
+        <button id="manualModelBtn" type="button" style="display: none; background: #0284c7; color: #fff; border: none; padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">📂 Selecionar .onnx do PC</button>
+        <button id="retryBtn" type="button" style="display: none; background: #334155; color: #fff; border: 1px solid #475569; padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">🔄 Tentar Novamente</button>
+        <div id="timeElapsed" style="font-size: 0.85rem; color: var(--text-muted);">Tempo: -</div>
+      </div>
+    </div>
+
+    <!-- Área Principal -->
+    <div class="main-grid">
+      <!-- Coluna Esquerda: Canvas e Upload -->
+      <div class="card">
+        <div class="upload-zone" id="dropZone" onclick="document.getElementById('imageInput').click()">
+          <input type="file" id="imageInput" accept="image/*" style="display: none;">
+          <p style="font-weight: 600; margin-bottom: 0.25rem;">Clique ou arraste uma foto com veículo/placa</p>
+          <p style="font-size: 0.8rem; color: var(--text-muted);">Suporta JPG, PNG, WEBP (Mercosul ou padrão antigo)</p>
+        </div>
+
+        <div class="canvas-container">
+          <canvas id="mainCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Coluna Direita: Resultados do OCR -->
+      <div class="card result-section">
+        <h2 style="font-size: 1.1rem;">Resultado da Decodificação</h2>
+        
+        <!-- Mockup Visual Placa Mercosul -->
+        <div class="mercosul-plate-card">
+          <div class="mercosul-header">
+            <div class="mercosul-flag">
+              <span>&#127463;&#127479;</span>
+              <span>BRASIL</span>
+            </div>
+            <span>MERCOSUL</span>
+          </div>
+          <div class="mercosul-body">
+            <div id="plateDisplay" class="plate-text empty">AGUARDANDO</div>
+          </div>
+        </div>
+
+        <!-- Recorte da Placa Processado -->
+        <div class="cropped-preview">
+          <label>Recorte da Placa (Entrada do CRNN):</label>
+          <canvas id="cropCanvas" width="160" height="32"></canvas>
+        </div>
+
+        <!-- Logs de Processamento -->
+        <div>
+          <label style="margin-bottom: 0.4rem; display: block;">Log de Execução:</label>
+          <div id="logOutput" class="logs-panel">
+            <div>[SISTEMA] Iniciando download e alocação dos modelos ONNX...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Alfabeto OpenCV CRNN (0-9 + a-z + blank)
+    const CRNN_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"
+    const YOLO_IMG_SIZE = 640
+    const CRNN_IMG_HEIGHT = 32
+    const CRNN_IMG_WIDTH = 100
+
+    let yoloSession = null
+    let ocrSession = null
+    let currentImage = null
+
+    // Elementos DOM
+    const statusDot = document.getElementById("statusDot")
+    const statusText = document.getElementById("statusText")
+    const timeElapsed = document.getElementById("timeElapsed")
+    const logOutput = document.getElementById("logOutput")
+    const mainCanvas = document.getElementById("mainCanvas")
+    const mainCtx = mainCanvas.getContext("2d")
+    const cropCanvas = document.getElementById("cropCanvas")
+    const cropCtx = cropCanvas.getContext("2d")
+    const plateDisplay = document.getElementById("plateDisplay")
+    const imageInput = document.getElementById("imageInput")
+
+    const addLog = (message) => {
+      const entry = document.createElement("div")
+      const time = new Date().toLocaleTimeString()
+      entry.textContent = `[${time}] ${message}`
+      logOutput.appendChild(entry)
+      logOutput.scrollTop = logOutput.scrollHeight
+    }
+
+    const setStatus = (text, state = "working") => {
+      statusText.textContent = text
+      statusDot.className = "dot"
+      if (state === "ready") statusDot.classList.add("ready")
+      if (state === "error") statusDot.classList.add("error")
+    }
+
+    const manualModelBtn = document.getElementById("manualModelBtn")
+    const retryBtn = document.getElementById("retryBtn")
+    const modelFileInput = document.getElementById("modelFileInput")
+
+    const REMOTE_YOLO_URL = "https://huggingface.co/ml-debi/yolov8-license-plate-detection/resolve/main/best.onnx?download=true"
+    const REMOTE_CRNN_URL = "https://huggingface.co/opencv/text_recognition_crnn/resolve/main/text_recognition_CRNN_EN_2021sep.onnx?download=true"
+
+    const loadSession = async (localPath, remoteUrl, modelName) => {
+      try {
+        addLog(`Carregando ${modelName} (${localPath})...`)
+        const session = await ort.InferenceSession.create(localPath, {
+          executionProviders: ["wasm"]
+        })
+        addLog(`[OK] ${modelName} carregado com sucesso.`)
+        return session
+      } catch (localError) {
+        addLog(`Aviso: Falha ao carregar ${modelName} localmente: ${localError.message}`)
+        if (window.location.protocol.startsWith("http")) {
+          try {
+            addLog(`Tentando baixar ${modelName} via CDN remoto...`)
+            const session = await ort.InferenceSession.create(remoteUrl, {
+              executionProviders: ["wasm"]
+            })
+            addLog(`[OK] ${modelName} carregado via CDN.`)
+            return session
+          } catch (remoteError) {
+            throw new Error(`Falha local e remota para ${modelName}: ${remoteError.message}`)
+          }
+        } else {
+          throw localError
+        }
+      }
+    }
+
+    // Inicialização automática dos modelos ONNX
+    const initSessions = async () => {
+      manualModelBtn.style.display = "none"
+      retryBtn.style.display = "none"
+
+      try {
+        setStatus("Carregando modelos ONNX na memória Wasm...", "working")
+        ort.env.wasm.numThreads = 2
+        ort.env.wasm.simd = true
+
+        if (window.location.protocol === "file:") {
+          addLog("[AVISO] Página aberta diretamente pelo arquivo (file://).")
+          addLog("Navegadores bloqueiam fetch local em file:// por segurança.")
+        }
+
+        yoloSession = await loadSession("./models/yolov8n-plate.onnx", REMOTE_YOLO_URL, "YOLOv8 Detecção")
+        ocrSession = await loadSession("./models/crnn-plate-ocr.onnx", REMOTE_CRNN_URL, "CRNN OCR")
+
+        setStatus("Modelos prontos! Envie uma imagem para testar.", "ready")
+      } catch (err) {
+        const isFileProtocol = window.location.protocol === "file:"
+        const message = isFileProtocol
+          ? "Erro: 'Failed to fetch' devido ao protocolo file://. Execute 'npm start' ou selecione os arquivos .onnx manualmente abaixo."
+          : `Erro ao carregar modelos: ${err.message}`
+
+        setStatus(message, "error")
+        addLog(`[ERRO] ${err.message}`)
+        if (isFileProtocol) {
+          addLog("DICA: Inicie o servidor local com 'npm start' ou clique no botão 'Selecionar .onnx do PC' acima.")
+        }
+
+        manualModelBtn.style.display = "inline-block"
+        retryBtn.style.display = "inline-block"
+      }
+    }
+
+    // Carregamento manual de arquivos .onnx pelo usuário
+    manualModelBtn.addEventListener("click", () => {
+      modelFileInput.click()
+    })
+
+    retryBtn.addEventListener("click", () => {
+      initSessions()
+    })
+
+    modelFileInput.addEventListener("change", async (event) => {
+      const files = Array.from(event.target.files)
+      if (files.length === 0) return
+
+      setStatus("Carregando arquivos selecionados...", "working")
+
+      for (const file of files) {
+        addLog(`Lendo arquivo local: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)...`)
+        try {
+          const arrayBuffer = await file.arrayBuffer()
+          const session = await ort.InferenceSession.create(arrayBuffer, {
+            executionProviders: ["wasm"]
+          })
+
+          const isYolo = file.name.toLowerCase().includes("yolo") || file.name.toLowerCase().includes("best") || file.size < 20 * 1024 * 1024
+          const isCrnn = file.name.toLowerCase().includes("crnn") || file.name.toLowerCase().includes("ocr") || file.name.toLowerCase().includes("text")
+
+          if (isCrnn && !isYolo) {
+            ocrSession = session
+            addLog(`[OK] Modelo CRNN OCR alocado a partir de ${file.name}.`)
+          } else {
+            yoloSession = session
+            addLog(`[OK] Modelo YOLO Detecção alocado a partir de ${file.name}.`)
+          }
+        } catch (error) {
+          addLog(`[ERRO] Falha ao carregar ${file.name}: ${error.message}`)
+        }
+      }
+
+      if (yoloSession && ocrSession) {
+        setStatus("Ambos os modelos carregados com sucesso! Pronto para testar.", "ready")
+      } else if (yoloSession) {
+        setStatus("YOLO carregado. Selecione também o modelo CRNN (crnn-plate-ocr.onnx).", "working")
+      } else if (ocrSession) {
+        setStatus("CRNN carregado. Selecione também o modelo YOLO (yolov8n-plate.onnx).", "working")
+      }
+    })
+
+    // Pré-processamento YOLOv8 (Letterbox 640x640, Normalização [0, 1], NCHW)
+    const preprocessYolo = (image) => {
+      const canvas = document.createElement("canvas")
+      canvas.width = YOLO_IMG_SIZE
+      canvas.height = YOLO_IMG_SIZE
+      const ctx = canvas.getContext("2d")
+
+      const scale = Math.min(YOLO_IMG_SIZE / image.width, YOLO_IMG_SIZE / image.height)
+      const padW = (YOLO_IMG_SIZE - image.width * scale) / 2
+      const padH = (YOLO_IMG_SIZE - image.height * scale) / 2
+
+      ctx.fillStyle = "#727272"
+      ctx.fillRect(0, 0, YOLO_IMG_SIZE, YOLO_IMG_SIZE)
+      ctx.drawImage(image, padW, padH, image.width * scale, image.height * scale)
+
+      const imgData = ctx.getImageData(0, 0, YOLO_IMG_SIZE, YOLO_IMG_SIZE).data
+      const floatData = new Float32Array(3 * YOLO_IMG_SIZE * YOLO_IMG_SIZE)
+
+      for (let i = 0; i < YOLO_IMG_SIZE * YOLO_IMG_SIZE; i++) {
+        floatData[i] = imgData[i * 4] / 255.0
+        floatData[YOLO_IMG_SIZE * YOLO_IMG_SIZE + i] = imgData[i * 4 + 1] / 255.0
+        floatData[2 * YOLO_IMG_SIZE * YOLO_IMG_SIZE + i] = imgData[i * 4 + 2] / 255.0
+      }
+
+      const inputName = yoloSession.inputNames[0]
+      const tensor = new ort.Tensor("float32", floatData, [1, 3, YOLO_IMG_SIZE, YOLO_IMG_SIZE])
+      return { tensor, scale, padW, padH, inputName }
+    }
+
+    // Pós-processamento YOLOv8 (Extração de Coordenadas + NMS)
+    const postprocessYolo = (outputTensor, scale, padW, padH, origW, origH, confThreshold = 0.25, iouThreshold = 0.45) => {
+      const data = outputTensor.data
+      const dims = outputTensor.dims
+      const numBoxes = dims[2]
+      const boxes = []
+
+      for (let i = 0; i < numBoxes; i++) {
+        const score = data[4 * numBoxes + i]
+        if (score >= confThreshold) {
+          const cx = data[0 * numBoxes + i]
+          const cy = data[1 * numBoxes + i]
+          const w = data[2 * numBoxes + i]
+          const h = data[3 * numBoxes + i]
+
+          const x1 = Math.max(0, ((cx - w / 2) - padW) / scale)
+          const y1 = Math.max(0, ((cy - h / 2) - padH) / scale)
+          const x2 = Math.min(origW, ((cx + w / 2) - padW) / scale)
+          const y2 = Math.min(origH, ((cy + h / 2) - padH) / scale)
+
+          boxes.push({
+            x: x1,
+            y: y1,
+            w: x2 - x1,
+            h: y2 - y1,
+            score: score
+          })
+        }
+      }
+
+      boxes.sort((a, b) => b.score - a.score)
+
+      const nmsBoxes = []
+      const calcIoU = (box1, box2) => {
+        const xA = Math.max(box1.x, box2.x)
+        const yA = Math.max(box1.y, box2.y)
+        const xB = Math.min(box1.x + box1.w, box2.x + box2.w)
+        const yB = Math.min(box1.y + box1.h, box2.y + box2.h)
+        const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA)
+        const box1Area = box1.w * box1.h
+        const box2Area = box2.w * box2.h
+        return interArea / (box1Area + box2Area - interArea)
+      }
+
+      for (const box of boxes) {
+        let keep = true
+        for (const prev of nmsBoxes) {
+          if (calcIoU(box, prev) > iouThreshold) {
+            keep = false
+            break
+          }
+        }
+        if (keep) nmsBoxes.push(box)
+      }
+
+      return nmsBoxes
+    }
+
+    // Pré-processamento CRNN (Grayscale/RGB 100x32, normalização standard)
+    const preprocessCrnn = (cropCanvasElement) => {
+      const canvas = document.createElement("canvas")
+      canvas.width = CRNN_IMG_WIDTH
+      canvas.height = CRNN_IMG_HEIGHT
+      const ctx = canvas.getContext("2d")
+
+      ctx.drawImage(cropCanvasElement, 0, 0, CRNN_IMG_WIDTH, CRNN_IMG_HEIGHT)
+      const imgData = ctx.getImageData(0, 0, CRNN_IMG_WIDTH, CRNN_IMG_HEIGHT).data
+      const floatData = new Float32Array(1 * 1 * CRNN_IMG_HEIGHT * CRNN_IMG_WIDTH)
+
+      // Converter para grayscale e normalizar [-1, 1] ou [0, 1]
+      for (let i = 0; i < CRNN_IMG_HEIGHT * CRNN_IMG_WIDTH; i++) {
+        const r = imgData[i * 4]
+        const g = imgData[i * 4 + 1]
+        const b = imgData[i * 4 + 2]
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b
+        floatData[i] = (gray / 127.5) - 1.0
+      }
+
+      const inputName = ocrSession.inputNames[0]
+      const tensor = new ort.Tensor("float32", floatData, [1, 1, CRNN_IMG_HEIGHT, CRNN_IMG_WIDTH])
+      return { tensor, inputName }
+    }
+
+    // Decodificação CTC Greedy Search
+    const decodeCtcGreedy = (logitsTensor) => {
+      const data = logitsTensor.data
+      const dims = logitsTensor.dims
+      let timeSteps = dims[0]
+      let numClasses = dims[2]
+
+      if (dims.length === 3 && dims[0] === 1) {
+        timeSteps = dims[1]
+        numClasses = dims[2]
+      }
+
+      const sequence = []
+      for (let t = 0; t < timeSteps; t++) {
+        let maxIndex = 0
+        let maxVal = -Infinity
+        for (let c = 0; c < numClasses; c++) {
+          const val = data[t * numClasses + c]
+          if (val > maxVal) {
+            maxVal = val
+            maxIndex = c
+          }
+        }
+        sequence.push(maxIndex)
+      }
+
+      const decoded = []
+      let prevToken = -1
+
+      for (const token of sequence) {
+        if (token !== prevToken) {
+          // Token 0 ou último costuma ser o Blank dependendo da exportação
+          if (token > 0 && token <= CRNN_CHARS.length) {
+            decoded.push(CRNN_CHARS[token - 1])
+          }
+          prevToken = token
+        }
+      }
+
+      return decoded.join("").toUpperCase()
+    }
+
+    // Processamento da imagem enviada
+    const processImage = async (image) => {
+      if (!yoloSession || !ocrSession) {
+        alert("Aguarde o carregamento automático dos modelos.")
+        return
+      }
+
+      const startTime = performance.now()
+      setStatus("Executando detecção com YOLOv8...", "working")
+      addLog("Processando imagem enviada...")
+
+      mainCanvas.width = image.width
+      mainCanvas.height = image.height
+      mainCtx.drawImage(image, 0, 0)
+
+      const { tensor: yoloInput, scale, padW, padH, inputName } = preprocessYolo(image)
+      const yoloFeeds = {}
+      yoloFeeds[inputName] = yoloInput
+      
+      const yoloResults = await yoloSession.run(yoloFeeds)
+      const yoloOutput = yoloResults[yoloSession.outputNames[0]]
+
+      const boxes = postprocessYolo(yoloOutput, scale, padW, padH, image.width, image.height)
+      addLog(`Placas detectadas: ${boxes.length}`)
+
+      if (boxes.length === 0) {
+        setStatus("Nenhuma placa identificada na imagem.", "ready")
+        plateDisplay.textContent = "NÃO DETECTADA"
+        plateDisplay.className = "plate-text empty"
+        timeElapsed.textContent = `Tempo: ${Math.round(performance.now() - startTime)}ms`
+        return
+      }
+
+      const bestBox = boxes[0]
+      addLog(`Coordenadas: [x: ${Math.round(bestBox.x)}, y: ${Math.round(bestBox.y)}, w: ${Math.round(bestBox.w)}, h: ${Math.round(bestBox.h)}] Confiança: ${(bestBox.score * 100).toFixed(1)}%`)
+
+      // Desenhar Bounding Box
+      mainCtx.strokeStyle = "#38bdf8"
+      mainCtx.lineWidth = Math.max(3, Math.round(image.width / 250))
+      mainCtx.strokeRect(bestBox.x, bestBox.y, bestBox.w, bestBox.h)
+      
+      mainCtx.fillStyle = "#38bdf8"
+      mainCtx.font = `bold ${Math.max(14, Math.round(image.width / 40))}px Inter, sans-serif`
+      mainCtx.fillText(`Placa ${(bestBox.score * 100).toFixed(0)}%`, bestBox.x, Math.max(20, bestBox.y - 8))
+
+      // Recortar placa para o OCR
+      cropCanvas.width = Math.max(1, bestBox.w)
+      cropCanvas.height = Math.max(1, bestBox.h)
+      cropCtx.drawImage(
+        image,
+        bestBox.x, bestBox.y, bestBox.w, bestBox.h,
+        0, 0, cropCanvas.width, cropCanvas.height
+      )
+
+      setStatus("Executando leitura de caracteres (CRNN + CTC)...", "working")
+      const { tensor: crnnTensor, inputName: crnnInputName } = preprocessCrnn(cropCanvas)
+      const ocrFeeds = {}
+      ocrFeeds[crnnInputName] = crnnTensor
+
+      const ocrResults = await ocrSession.run(ocrFeeds)
+      const ocrOutput = ocrResults[ocrSession.outputNames[0]]
+
+      const recognizedText = decodeCtcGreedy(ocrOutput)
+      addLog(`Texto reconhecido: "${recognizedText}"`)
+
+      plateDisplay.textContent = recognizedText || "VAZIO"
+      plateDisplay.className = "plate-text"
+      const totalTime = Math.round(performance.now() - startTime)
+      timeElapsed.textContent = `Tempo: ${totalTime}ms`
+      setStatus("Processamento 100% concluído!", "ready")
+    }
+
+    // Eventos de Upload e Drag-and-drop
+    imageInput.addEventListener("change", (e) => {
+      const file = e.target.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const img = new Image()
+          img.onload = () => {
+            currentImage = img
+            processImage(img)
+          }
+          img.src = event.target.result
+        }
+        reader.readAsDataURL(file)
+      }
+    })
+
+    const dropZone = document.getElementById("dropZone")
+    dropZone.addEventListener("dragover", (e) => {
+      e.preventDefault()
+      dropZone.style.borderColor = "#38bdf8"
+    })
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.style.borderColor = ""
+    })
+    dropZone.addEventListener("drop", (e) => {
+      e.preventDefault()
+      dropZone.style.borderColor = ""
+      const file = e.dataTransfer.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const img = new Image()
+          img.onload = () => {
+            currentImage = img
+            processImage(img)
+          }
+          img.src = event.target.result
+        }
+        reader.readAsDataURL(file)
+      }
+    })
+
+    // Iniciar carregamento dos modelos automaticamente na abertura
+    window.addEventListener("DOMContentLoaded", () => {
+      initSessions()
+    })
+  </script>
+</body>
+</html>

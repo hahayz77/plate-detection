@@ -1,0 +1,13 @@
+{
+  "name": "plate-detection",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Client-side license plate detection and OCR using ONNX Runtime Web",
+  "scripts": {
+    "download:models": "node download_models.js",
+    "start": "npx serve ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}
