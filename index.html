@@ -3,15 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reconhecimento de Placas Veiculares (YOLO + CRNN/CTC)</title>
-  <!-- ONNX Runtime Web via CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js"></script>
+  <title>Reconhecimento de Placas Veiculares (FastAPI + PaddleOCR)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg-color: #0f172a;
+      --bg-color: #0b1120;
       --card-bg: #1e293b;
       --border-color: #334155;
       --text-main: #f8fafc;
@@ -110,19 +108,13 @@
       50% { opacity: 0.4; transform: scale(0.9); }
     }
 
-    label {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
-    }
-
     .main-grid {
       display: grid;
-      grid-template-columns: 2fr 1fr;
+      grid-template-columns: 1.8fr 1.2fr;
       gap: 1.5rem;
     }
 
-    @media (max-width: 850px) {
+    @media (max-width: 900px) {
       .main-grid {
         grid-template-columns: 1fr;
       }
@@ -138,6 +130,54 @@
       gap: 1rem;
     }
 
+    .controls-row {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--accent);
+      background: rgba(56, 189, 248, 0.03);
+      padding: 1.25rem;
+      border-radius: 0.5rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex: 1;
+    }
+
+    .upload-zone:hover {
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    button {
+      background: var(--accent);
+      color: #0f172a;
+      border: none;
+      padding: 0.75rem 1.25rem;
+      border-radius: 0.5rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--accent-hover);
+      color: #fff;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .canvas-container {
       width: 100%;
       background: #020617;
@@ -146,7 +186,7 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      min-height: 400px;
+      min-height: 380px;
       position: relative;
       overflow: hidden;
     }
@@ -158,31 +198,11 @@
       display: block;
     }
 
-    .upload-zone {
-      border: 2px dashed var(--accent);
-      background: rgba(56, 189, 248, 0.03);
-      padding: 1.5rem;
-      border-radius: 0.5rem;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .upload-zone:hover {
-      background: rgba(56, 189, 248, 0.08);
-    }
-
-    .result-section {
-      display: flex;
-      flex-direction: column;
-      gap: 1.25rem;
-    }
-
     .mercosul-plate-card {
       background: var(--plate-bg);
-      border-radius: 6px;
+      border-radius: 8px;
       border: 3px solid #1e40af;
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
       width: 100%;
       max-width: 320px;
       margin: 0 auto;
@@ -194,7 +214,7 @@
     .mercosul-header {
       background: #1e40af;
       color: #ffffff;
-      padding: 4px 8px;
+      padding: 5px 10px;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -205,45 +225,79 @@
 
     .mercosul-flag {
       display: flex;
-      gap: 4px;
+      gap: 5px;
       align-items: center;
     }
 
     .mercosul-body {
-      padding: 12px 15px;
+      padding: 16px 15px;
       text-align: center;
       background: #ffffff;
     }
 
     .plate-text {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 2.2rem;
+      font-size: 2.3rem;
       font-weight: 700;
-      letter-spacing: 4px;
+      letter-spacing: 5px;
       color: var(--plate-text);
       line-height: 1.1;
       text-transform: uppercase;
-      word-break: break-all;
     }
 
     .plate-text.empty {
       color: #94a3b8;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       letter-spacing: normal;
     }
 
-    .cropped-preview {
+    .field-group {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
-      align-items: center;
+      gap: 0.4rem;
     }
 
-    #cropCanvas {
-      max-height: 56px;
-      background: #000;
-      border-radius: 4px;
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    input[type="text"] {
+      background: #0f172a;
       border: 1px solid var(--border-color);
+      color: #fff;
+      padding: 0.6rem 0.8rem;
+      border-radius: 0.4rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
+    }
+
+    .stat-box {
+      background: #0f172a;
+      border: 1px solid var(--border-color);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.2rem;
     }
 
     .logs-panel {
@@ -252,9 +306,9 @@
       border-radius: 0.5rem;
       padding: 0.75rem;
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: #38bdf8;
-      max-height: 160px;
+      max-height: 140px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
@@ -265,68 +319,82 @@
 <body>
   <div class="container">
     <header>
-      <h1>Detector de Placas & OCR Client-side</h1>
-      <p class="subtitle">ONNX Runtime Web (Wasm) &bull; YOLOv8 Detection &bull; CRNN + CTC Greedy Search</p>
+      <h1>Reconhecimento de Placas Veiculares</h1>
+      <p class="subtitle">Backend Docker (Python + FastAPI + PaddleOCR) &bull; Frontend Web</p>
     </header>
 
-    <!-- Barra de Status com inicialização automática -->
+    <!-- Barra de Status com conexão da API -->
     <div class="status-panel">
       <div class="status-indicator">
         <div id="statusDot" class="dot"></div>
-        <span id="statusText">Inicializando WebAssembly e carregando modelos ONNX...</span>
+        <span id="statusText">Verificando status da API Docker (http://localhost:8000)...</span>
       </div>
       <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <input type="file" id="modelFileInput" multiple accept=".onnx" style="display: none;">
-        <button id="manualModelBtn" type="button" style="display: none; background: #0284c7; color: #fff; border: none; padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">📂 Selecionar .onnx do PC</button>
-        <button id="retryBtn" type="button" style="display: none; background: #334155; color: #fff; border: 1px solid #475569; padding: 0.4rem 0.8rem; border-radius: 0.375rem; font-size: 0.8rem; font-weight: 600; cursor: pointer;">🔄 Tentar Novamente</button>
-        <div id="timeElapsed" style="font-size: 0.85rem; color: var(--text-muted);">Tempo: -</div>
+        <button id="checkApiBtn" type="button" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">🔄 Testar Conexão</button>
       </div>
     </div>
 
-    <!-- Área Principal -->
     <div class="main-grid">
       <!-- Coluna Esquerda: Canvas e Upload -->
       <div class="card">
-        <div class="upload-zone" id="dropZone" onclick="document.getElementById('imageInput').click()">
-          <input type="file" id="imageInput" accept="image/*" style="display: none;">
-          <p style="font-weight: 600; margin-bottom: 0.25rem;">Clique ou arraste uma foto com veículo/placa</p>
-          <p style="font-size: 0.8rem; color: var(--text-muted);">Suporta JPG, PNG, WEBP (Mercosul ou padrão antigo)</p>
+        <div class="controls-row">
+          <div class="upload-zone" id="dropZone" onclick="document.getElementById('imageInput').click()">
+            <input type="file" id="imageInput" accept="image/*" style="display: none;">
+            <p style="font-weight: 600; margin-bottom: 0.2rem;">Clique ou arraste uma foto do veículo</p>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Formatos: JPG, PNG, WEBP</p>
+          </div>
+          <button id="sendBtn" type="button" disabled>⚡ Enviar p/ API</button>
         </div>
 
         <div class="canvas-container">
           <canvas id="mainCanvas"></canvas>
+          <div id="placeholderText" style="color: var(--text-muted); font-size: 0.95rem;">Nenhuma imagem carregada</div>
         </div>
       </div>
 
-      <!-- Coluna Direita: Resultados do OCR -->
-      <div class="card result-section">
+      <!-- Coluna Direita: Resultado -->
+      <div class="card">
         <h2 style="font-size: 1.1rem;">Resultado da Decodificação</h2>
-        
+
         <!-- Mockup Visual Placa Mercosul -->
         <div class="mercosul-plate-card">
           <div class="mercosul-header">
             <div class="mercosul-flag">
-              <span>&#127463;&#127479;</span>
+              <span>🇧🇷</span>
               <span>BRASIL</span>
             </div>
-            <span>MERCOSUL</span>
+            <span id="plateHeaderBadge">MERCOSUL</span>
           </div>
           <div class="mercosul-body">
             <div id="plateDisplay" class="plate-text empty">AGUARDANDO</div>
           </div>
         </div>
 
-        <!-- Recorte da Placa Processado -->
-        <div class="cropped-preview">
-          <label>Recorte da Placa (Entrada do CRNN):</label>
-          <canvas id="cropCanvas" width="160" height="32"></canvas>
+        <div class="field-group">
+          <label for="plateInput">Texto Reconhecido:</label>
+          <input type="text" id="plateInput" placeholder="Aguardando envio..." readonly>
         </div>
 
-        <!-- Logs de Processamento -->
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div id="confidenceDisplay" class="stat-value">-</div>
+            <div class="stat-label">Confiança OCR</div>
+          </div>
+          <div class="stat-box">
+            <div id="timeDisplay" class="stat-value">-</div>
+            <div class="stat-label">Tempo de Resposta</div>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="apiUrlInput">URL da API Backend:</label>
+          <input type="text" id="apiUrlInput" value="http://localhost:8000/detect">
+        </div>
+
         <div>
           <label style="margin-bottom: 0.4rem; display: block;">Log de Execução:</label>
           <div id="logOutput" class="logs-panel">
-            <div>[SISTEMA] Iniciando download e alocação dos modelos ONNX...</div>
+            <div>[SISTEMA] Pronto para receber imagens.</div>
           </div>
         </div>
       </div>
@@ -334,27 +402,27 @@
   </div>
 
   <script>
-    // Alfabeto OpenCV CRNN (0-9 + a-z + blank)
-    const CRNN_CHARS = "0123456789abcdefghijklmnopqrstuvwxyz"
-    const YOLO_IMG_SIZE = 640
-    const CRNN_IMG_HEIGHT = 32
-    const CRNN_IMG_WIDTH = 100
+    const API_HEALTH_URL = "http://localhost:8000/health"
+    let currentFile = null
+    let currentImageElement = null
 
-    let yoloSession = null
-    let ocrSession = null
-    let currentImage = null
-
-    // Elementos DOM
+    // DOM Elements
     const statusDot = document.getElementById("statusDot")
     const statusText = document.getElementById("statusText")
-    const timeElapsed = document.getElementById("timeElapsed")
-    const logOutput = document.getElementById("logOutput")
+    const checkApiBtn = document.getElementById("checkApiBtn")
+    const imageInput = document.getElementById("imageInput")
+    const dropZone = document.getElementById("dropZone")
+    const sendBtn = document.getElementById("sendBtn")
     const mainCanvas = document.getElementById("mainCanvas")
     const mainCtx = mainCanvas.getContext("2d")
-    const cropCanvas = document.getElementById("cropCanvas")
-    const cropCtx = cropCanvas.getContext("2d")
+    const placeholderText = document.getElementById("placeholderText")
     const plateDisplay = document.getElementById("plateDisplay")
-    const imageInput = document.getElementById("imageInput")
+    const plateHeaderBadge = document.getElementById("plateHeaderBadge")
+    const plateInput = document.getElementById("plateInput")
+    const confidenceDisplay = document.getElementById("confidenceDisplay")
+    const timeDisplay = document.getElementById("timeDisplay")
+    const apiUrlInput = document.getElementById("apiUrlInput")
+    const logOutput = document.getElementById("logOutput")
 
     const addLog = (message) => {
       const entry = document.createElement("div")
@@ -371,395 +439,199 @@
       if (state === "error") statusDot.classList.add("error")
     }
 
-    const manualModelBtn = document.getElementById("manualModelBtn")
-    const retryBtn = document.getElementById("retryBtn")
-    const modelFileInput = document.getElementById("modelFileInput")
-
-    const REMOTE_YOLO_URL = "https://huggingface.co/ml-debi/yolov8-license-plate-detection/resolve/main/best.onnx?download=true"
-    const REMOTE_CRNN_URL = "https://huggingface.co/opencv/text_recognition_crnn/resolve/main/text_recognition_CRNN_EN_2021sep.onnx?download=true"
-
-    const loadSession = async (localPath, remoteUrl, modelName) => {
+    // Check Backend Health
+    const checkBackendStatus = async () => {
+      setStatus("Verificando conexão com Docker API...", "working")
       try {
-        addLog(`Carregando ${modelName} (${localPath})...`)
-        const session = await ort.InferenceSession.create(localPath, {
-          executionProviders: ["wasm"]
-        })
-        addLog(`[OK] ${modelName} carregado com sucesso.`)
-        return session
-      } catch (localError) {
-        addLog(`Aviso: Falha ao carregar ${modelName} localmente: ${localError.message}`)
-        if (window.location.protocol.startsWith("http")) {
-          try {
-            addLog(`Tentando baixar ${modelName} via CDN remoto...`)
-            const session = await ort.InferenceSession.create(remoteUrl, {
-              executionProviders: ["wasm"]
-            })
-            addLog(`[OK] ${modelName} carregado via CDN.`)
-            return session
-          } catch (remoteError) {
-            throw new Error(`Falha local e remota para ${modelName}: ${remoteError.message}`)
-          }
+        const response = await fetch(API_HEALTH_URL, { method: "GET" })
+        if (response.ok) {
+          const data = await response.json()
+          setStatus(`Docker API Online (${data.service || "FastAPI + PaddleOCR"})`, "ready")
+          addLog("Backend Docker está respondendo normalmente em http://localhost:8000")
+          return true
         } else {
-          throw localError
+          throw new Error(`HTTP ${response.status}`)
         }
+      } catch (error) {
+        setStatus("Backend Docker Offline ou não iniciado (http://localhost:8000)", "error")
+        addLog("Erro ao conectar à API: " + error.message)
+        addLog("Dica: Inicie o container com 'docker compose up --build'")
+        return false
       }
     }
 
-    // Inicialização automática dos modelos ONNX
-    const initSessions = async () => {
-      manualModelBtn.style.display = "none"
-      retryBtn.style.display = "none"
+    // Draw Image & Bounding Boxes on Canvas
+    const drawDetections = (img, plates) => {
+      mainCanvas.width = img.width
+      mainCanvas.height = img.height
+      mainCtx.drawImage(img, 0, 0)
+      placeholderText.style.display = "none"
 
-      try {
-        setStatus("Carregando modelos ONNX na memória Wasm...", "working")
-        ort.env.wasm.numThreads = 2
-        ort.env.wasm.simd = true
+      plates.forEach((plate, index) => {
+        const box = plate.box
 
-        if (window.location.protocol === "file:") {
-          addLog("[AVISO] Página aberta diretamente pelo arquivo (file://).")
-          addLog("Navegadores bloqueiam fetch local em file:// por segurança.")
-        }
-
-        yoloSession = await loadSession("./models/yolov8n-plate.onnx", REMOTE_YOLO_URL, "YOLOv8 Detecção")
-        ocrSession = await loadSession("./models/crnn-plate-ocr.onnx", REMOTE_CRNN_URL, "CRNN OCR")
-
-        setStatus("Modelos prontos! Envie uma imagem para testar.", "ready")
-      } catch (err) {
-        const isFileProtocol = window.location.protocol === "file:"
-        const message = isFileProtocol
-          ? "Erro: 'Failed to fetch' devido ao protocolo file://. Execute 'npm start' ou selecione os arquivos .onnx manualmente abaixo."
-          : `Erro ao carregar modelos: ${err.message}`
-
-        setStatus(message, "error")
-        addLog(`[ERRO] ${err.message}`)
-        if (isFileProtocol) {
-          addLog("DICA: Inicie o servidor local com 'npm start' ou clique no botão 'Selecionar .onnx do PC' acima.")
-        }
-
-        manualModelBtn.style.display = "inline-block"
-        retryBtn.style.display = "inline-block"
-      }
-    }
-
-    // Carregamento manual de arquivos .onnx pelo usuário
-    manualModelBtn.addEventListener("click", () => {
-      modelFileInput.click()
-    })
-
-    retryBtn.addEventListener("click", () => {
-      initSessions()
-    })
-
-    modelFileInput.addEventListener("change", async (event) => {
-      const files = Array.from(event.target.files)
-      if (files.length === 0) return
-
-      setStatus("Carregando arquivos selecionados...", "working")
-
-      for (const file of files) {
-        addLog(`Lendo arquivo local: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)...`)
-        try {
-          const arrayBuffer = await file.arrayBuffer()
-          const session = await ort.InferenceSession.create(arrayBuffer, {
-            executionProviders: ["wasm"]
-          })
-
-          const isYolo = file.name.toLowerCase().includes("yolo") || file.name.toLowerCase().includes("best") || file.size < 20 * 1024 * 1024
-          const isCrnn = file.name.toLowerCase().includes("crnn") || file.name.toLowerCase().includes("ocr") || file.name.toLowerCase().includes("text")
-
-          if (isCrnn && !isYolo) {
-            ocrSession = session
-            addLog(`[OK] Modelo CRNN OCR alocado a partir de ${file.name}.`)
-          } else {
-            yoloSession = session
-            addLog(`[OK] Modelo YOLO Detecção alocado a partir de ${file.name}.`)
+        // Draw Polygon if available, otherwise bounding rect
+        mainCtx.beginPath()
+        if (box.polygon && box.polygon.length >= 4) {
+          mainCtx.moveTo(box.polygon[0][0], box.polygon[0][1])
+          for (let i = 1; i < box.polygon.length; i++) {
+            mainCtx.lineTo(box.polygon[i][0], box.polygon[i][1])
           }
-        } catch (error) {
-          addLog(`[ERRO] Falha ao carregar ${file.name}: ${error.message}`)
+          mainCtx.closePath()
+        } else {
+          mainCtx.rect(box.x, box.y, box.width, box.height)
         }
-      }
 
-      if (yoloSession && ocrSession) {
-        setStatus("Ambos os modelos carregados com sucesso! Pronto para testar.", "ready")
-      } else if (yoloSession) {
-        setStatus("YOLO carregado. Selecione também o modelo CRNN (crnn-plate-ocr.onnx).", "working")
-      } else if (ocrSession) {
-        setStatus("CRNN carregado. Selecione também o modelo YOLO (yolov8n-plate.onnx).", "working")
-      }
-    })
+        mainCtx.lineWidth = Math.max(3, Math.round(img.width / 250))
+        mainCtx.strokeStyle = "#38bdf8"
+        mainCtx.fillStyle = "rgba(56, 189, 248, 0.15)"
+        mainCtx.fill()
+        mainCtx.stroke()
 
-    // Pré-processamento YOLOv8 (Letterbox 640x640, Normalização [0, 1], NCHW)
-    const preprocessYolo = (image) => {
-      const canvas = document.createElement("canvas")
-      canvas.width = YOLO_IMG_SIZE
-      canvas.height = YOLO_IMG_SIZE
-      const ctx = canvas.getContext("2d")
+        // Draw text tag
+        const tagText = `${plate.text} (${(plate.confidence * 100).toFixed(0)}%)`
+        const fontSize = Math.max(14, Math.round(img.width / 40))
+        mainCtx.font = `bold ${fontSize}px 'JetBrains Mono', sans-serif`
+        
+        const textMetrics = mainCtx.measureText(tagText)
+        const textHeight = fontSize + 6
+        const textX = box.x
+        const textY = Math.max(textHeight, box.y - 8)
 
-      const scale = Math.min(YOLO_IMG_SIZE / image.width, YOLO_IMG_SIZE / image.height)
-      const padW = (YOLO_IMG_SIZE - image.width * scale) / 2
-      const padH = (YOLO_IMG_SIZE - image.height * scale) / 2
+        mainCtx.fillStyle = "#0284c7"
+        mainCtx.fillRect(textX - 2, textY - fontSize, textMetrics.width + 10, textHeight)
 
-      ctx.fillStyle = "#727272"
-      ctx.fillRect(0, 0, YOLO_IMG_SIZE, YOLO_IMG_SIZE)
-      ctx.drawImage(image, padW, padH, image.width * scale, image.height * scale)
-
-      const imgData = ctx.getImageData(0, 0, YOLO_IMG_SIZE, YOLO_IMG_SIZE).data
-      const floatData = new Float32Array(3 * YOLO_IMG_SIZE * YOLO_IMG_SIZE)
-
-      for (let i = 0; i < YOLO_IMG_SIZE * YOLO_IMG_SIZE; i++) {
-        floatData[i] = imgData[i * 4] / 255.0
-        floatData[YOLO_IMG_SIZE * YOLO_IMG_SIZE + i] = imgData[i * 4 + 1] / 255.0
-        floatData[2 * YOLO_IMG_SIZE * YOLO_IMG_SIZE + i] = imgData[i * 4 + 2] / 255.0
-      }
-
-      const inputName = yoloSession.inputNames[0]
-      const tensor = new ort.Tensor("float32", floatData, [1, 3, YOLO_IMG_SIZE, YOLO_IMG_SIZE])
-      return { tensor, scale, padW, padH, inputName }
+        mainCtx.fillStyle = "#ffffff"
+        mainCtx.fillText(tagText, textX + 3, textY - 2)
+      })
     }
 
-    // Pós-processamento YOLOv8 (Extração de Coordenadas + NMS)
-    const postprocessYolo = (outputTensor, scale, padW, padH, origW, origH, confThreshold = 0.25, iouThreshold = 0.45) => {
-      const data = outputTensor.data
-      const dims = outputTensor.dims
-      const numBoxes = dims[2]
-      const boxes = []
-
-      for (let i = 0; i < numBoxes; i++) {
-        const score = data[4 * numBoxes + i]
-        if (score >= confThreshold) {
-          const cx = data[0 * numBoxes + i]
-          const cy = data[1 * numBoxes + i]
-          const w = data[2 * numBoxes + i]
-          const h = data[3 * numBoxes + i]
-
-          const x1 = Math.max(0, ((cx - w / 2) - padW) / scale)
-          const y1 = Math.max(0, ((cy - h / 2) - padH) / scale)
-          const x2 = Math.min(origW, ((cx + w / 2) - padW) / scale)
-          const y2 = Math.min(origH, ((cy + h / 2) - padH) / scale)
-
-          boxes.push({
-            x: x1,
-            y: y1,
-            w: x2 - x1,
-            h: y2 - y1,
-            score: score
-          })
-        }
-      }
-
-      boxes.sort((a, b) => b.score - a.score)
-
-      const nmsBoxes = []
-      const calcIoU = (box1, box2) => {
-        const xA = Math.max(box1.x, box2.x)
-        const yA = Math.max(box1.y, box2.y)
-        const xB = Math.min(box1.x + box1.w, box2.x + box2.w)
-        const yB = Math.min(box1.y + box1.h, box2.y + box2.h)
-        const interArea = Math.max(0, xB - xA) * Math.max(0, yB - yA)
-        const box1Area = box1.w * box1.h
-        const box2Area = box2.w * box2.h
-        return interArea / (box1Area + box2Area - interArea)
-      }
-
-      for (const box of boxes) {
-        let keep = true
-        for (const prev of nmsBoxes) {
-          if (calcIoU(box, prev) > iouThreshold) {
-            keep = false
-            break
-          }
-        }
-        if (keep) nmsBoxes.push(box)
-      }
-
-      return nmsBoxes
-    }
-
-    // Pré-processamento CRNN (Grayscale/RGB 100x32, normalização standard)
-    const preprocessCrnn = (cropCanvasElement) => {
-      const canvas = document.createElement("canvas")
-      canvas.width = CRNN_IMG_WIDTH
-      canvas.height = CRNN_IMG_HEIGHT
-      const ctx = canvas.getContext("2d")
-
-      ctx.drawImage(cropCanvasElement, 0, 0, CRNN_IMG_WIDTH, CRNN_IMG_HEIGHT)
-      const imgData = ctx.getImageData(0, 0, CRNN_IMG_WIDTH, CRNN_IMG_HEIGHT).data
-      const floatData = new Float32Array(1 * 1 * CRNN_IMG_HEIGHT * CRNN_IMG_WIDTH)
-
-      // Converter para grayscale e normalizar [-1, 1] ou [0, 1]
-      for (let i = 0; i < CRNN_IMG_HEIGHT * CRNN_IMG_WIDTH; i++) {
-        const r = imgData[i * 4]
-        const g = imgData[i * 4 + 1]
-        const b = imgData[i * 4 + 2]
-        const gray = 0.299 * r + 0.587 * g + 0.114 * b
-        floatData[i] = (gray / 127.5) - 1.0
-      }
-
-      const inputName = ocrSession.inputNames[0]
-      const tensor = new ort.Tensor("float32", floatData, [1, 1, CRNN_IMG_HEIGHT, CRNN_IMG_WIDTH])
-      return { tensor, inputName }
-    }
-
-    // Decodificação CTC Greedy Search
-    const decodeCtcGreedy = (logitsTensor) => {
-      const data = logitsTensor.data
-      const dims = logitsTensor.dims
-      let timeSteps = dims[0]
-      let numClasses = dims[2]
-
-      if (dims.length === 3 && dims[0] === 1) {
-        timeSteps = dims[1]
-        numClasses = dims[2]
-      }
-
-      const sequence = []
-      for (let t = 0; t < timeSteps; t++) {
-        let maxIndex = 0
-        let maxVal = -Infinity
-        for (let c = 0; c < numClasses; c++) {
-          const val = data[t * numClasses + c]
-          if (val > maxVal) {
-            maxVal = val
-            maxIndex = c
-          }
-        }
-        sequence.push(maxIndex)
-      }
-
-      const decoded = []
-      let prevToken = -1
-
-      for (const token of sequence) {
-        if (token !== prevToken) {
-          // Token 0 ou último costuma ser o Blank dependendo da exportação
-          if (token > 0 && token <= CRNN_CHARS.length) {
-            decoded.push(CRNN_CHARS[token - 1])
-          }
-          prevToken = token
-        }
-      }
-
-      return decoded.join("").toUpperCase()
-    }
-
-    // Processamento da imagem enviada
-    const processImage = async (image) => {
-      if (!yoloSession || !ocrSession) {
-        alert("Aguarde o carregamento automático dos modelos.")
+    // Handle File Selection
+    const handleFile = (file) => {
+      if (!file || !file.type.startsWith("image/")) {
+        alert("Por favor, selecione um arquivo de imagem válido.")
         return
       }
+
+      currentFile = file
+      sendBtn.disabled = false
+
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const img = new Image()
+        img.onload = () => {
+          currentImageElement = img
+          mainCanvas.width = img.width
+          mainCanvas.height = img.height
+          mainCtx.drawImage(img, 0, 0)
+          placeholderText.style.display = "none"
+          addLog(`Imagem carregada: ${file.name} (${img.width}x${img.height}px)`)
+        }
+        img.src = event.target.result
+      }
+      reader.readAsDataURL(file)
+    }
+
+    // Send Image to FastAPI Backend
+    const sendImageToApi = async () => {
+      if (!currentFile) return
+
+      const apiUrl = apiUrlInput.value.trim() || "http://localhost:8000/detect"
+      setStatus("Enviando imagem para o PaddleOCR no backend...", "working")
+      sendBtn.disabled = true
+      addLog(`Enviando POST para ${apiUrl}...`)
+
+      const formData = new FormData()
+      formData.append("file", currentFile)
 
       const startTime = performance.now()
-      setStatus("Executando detecção com YOLOv8...", "working")
-      addLog("Processando imagem enviada...")
 
-      mainCanvas.width = image.width
-      mainCanvas.height = image.height
-      mainCtx.drawImage(image, 0, 0)
+      try {
+        const response = await fetch(apiUrl, {
+          method: "POST",
+          body: formData
+        })
 
-      const { tensor: yoloInput, scale, padW, padH, inputName } = preprocessYolo(image)
-      const yoloFeeds = {}
-      yoloFeeds[inputName] = yoloInput
-      
-      const yoloResults = await yoloSession.run(yoloFeeds)
-      const yoloOutput = yoloResults[yoloSession.outputNames[0]]
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.detail || `Erro HTTP ${response.status}`)
+        }
 
-      const boxes = postprocessYolo(yoloOutput, scale, padW, padH, image.width, image.height)
-      addLog(`Placas detectadas: ${boxes.length}`)
+        const data = await response.json()
+        const roundTripTime = Math.round(performance.now() - startTime)
 
-      if (boxes.length === 0) {
-        setStatus("Nenhuma placa identificada na imagem.", "ready")
-        plateDisplay.textContent = "NÃO DETECTADA"
-        plateDisplay.className = "plate-text empty"
-        timeElapsed.textContent = `Tempo: ${Math.round(performance.now() - startTime)}ms`
-        return
+        addLog(`Resposta recebida em ${roundTripTime}ms (Backend OCR: ${data.processing_time_ms}ms)`)
+
+        if (data.plates && data.plates.length > 0) {
+          const bestPlate = data.plates[0]
+          plateDisplay.textContent = bestPlate.text
+          plateDisplay.className = "plate-text"
+          plateInput.value = bestPlate.text
+
+          if (bestPlate.is_mercosul) {
+            plateHeaderBadge.textContent = "MERCOSUL"
+          } else if (bestPlate.is_classic) {
+            plateHeaderBadge.textContent = "BRASIL (ANTIGA)"
+          } else {
+            plateHeaderBadge.textContent = "PLACA / OCR"
+          }
+
+          confidenceDisplay.textContent = `${(bestPlate.confidence * 100).toFixed(1)}%`
+          timeDisplay.textContent = `${data.processing_time_ms}ms`
+
+          drawDetections(currentImageElement, data.plates)
+          setStatus(`Sucesso! Placa "${bestPlate.text}" detectada.`, "ready")
+          addLog(`Placa identificada: ${bestPlate.text} | Confiança: ${(bestPlate.confidence * 100).toFixed(1)}%`)
+        } else {
+          plateDisplay.textContent = "NÃO DETECTADA"
+          plateDisplay.className = "plate-text empty"
+          plateInput.value = ""
+          confidenceDisplay.textContent = "-"
+          timeDisplay.textContent = `${data.processing_time_ms}ms`
+          setStatus("Nenhuma placa identificada na imagem.", "ready")
+          addLog("Nenhuma placa ou texto compatível foi encontrado.")
+        }
+      } catch (error) {
+        setStatus(`Falha na requisição: ${error.message}`, "error")
+        addLog(`[ERRO] ${error.message}`)
+      } finally {
+        sendBtn.disabled = false
       }
-
-      const bestBox = boxes[0]
-      addLog(`Coordenadas: [x: ${Math.round(bestBox.x)}, y: ${Math.round(bestBox.y)}, w: ${Math.round(bestBox.w)}, h: ${Math.round(bestBox.h)}] Confiança: ${(bestBox.score * 100).toFixed(1)}%`)
-
-      // Desenhar Bounding Box
-      mainCtx.strokeStyle = "#38bdf8"
-      mainCtx.lineWidth = Math.max(3, Math.round(image.width / 250))
-      mainCtx.strokeRect(bestBox.x, bestBox.y, bestBox.w, bestBox.h)
-      
-      mainCtx.fillStyle = "#38bdf8"
-      mainCtx.font = `bold ${Math.max(14, Math.round(image.width / 40))}px Inter, sans-serif`
-      mainCtx.fillText(`Placa ${(bestBox.score * 100).toFixed(0)}%`, bestBox.x, Math.max(20, bestBox.y - 8))
-
-      // Recortar placa para o OCR
-      cropCanvas.width = Math.max(1, bestBox.w)
-      cropCanvas.height = Math.max(1, bestBox.h)
-      cropCtx.drawImage(
-        image,
-        bestBox.x, bestBox.y, bestBox.w, bestBox.h,
-        0, 0, cropCanvas.width, cropCanvas.height
-      )
-
-      setStatus("Executando leitura de caracteres (CRNN + CTC)...", "working")
-      const { tensor: crnnTensor, inputName: crnnInputName } = preprocessCrnn(cropCanvas)
-      const ocrFeeds = {}
-      ocrFeeds[crnnInputName] = crnnTensor
-
-      const ocrResults = await ocrSession.run(ocrFeeds)
-      const ocrOutput = ocrResults[ocrSession.outputNames[0]]
-
-      const recognizedText = decodeCtcGreedy(ocrOutput)
-      addLog(`Texto reconhecido: "${recognizedText}"`)
-
-      plateDisplay.textContent = recognizedText || "VAZIO"
-      plateDisplay.className = "plate-text"
-      const totalTime = Math.round(performance.now() - startTime)
-      timeElapsed.textContent = `Tempo: ${totalTime}ms`
-      setStatus("Processamento 100% concluído!", "ready")
     }
 
-    // Eventos de Upload e Drag-and-drop
+    // Event Listeners
     imageInput.addEventListener("change", (e) => {
-      const file = e.target.files[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          const img = new Image()
-          img.onload = () => {
-            currentImage = img
-            processImage(img)
-          }
-          img.src = event.target.result
-        }
-        reader.readAsDataURL(file)
-      }
+      handleFile(e.target.files[0])
     })
 
-    const dropZone = document.getElementById("dropZone")
     dropZone.addEventListener("dragover", (e) => {
       e.preventDefault()
       dropZone.style.borderColor = "#38bdf8"
     })
+
     dropZone.addEventListener("dragleave", () => {
       dropZone.style.borderColor = ""
     })
+
     dropZone.addEventListener("drop", (e) => {
       e.preventDefault()
       dropZone.style.borderColor = ""
-      const file = e.dataTransfer.files[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          const img = new Image()
-          img.onload = () => {
-            currentImage = img
-            processImage(img)
-          }
-          img.src = event.target.result
-        }
-        reader.readAsDataURL(file)
+      if (e.dataTransfer.files.length > 0) {
+        handleFile(e.dataTransfer.files[0])
       }
     })
 
-    // Iniciar carregamento dos modelos automaticamente na abertura
+    sendBtn.addEventListener("click", () => {
+      sendImageToApi()
+    })
+
+    checkApiBtn.addEventListener("click", () => {
+      checkBackendStatus()
+    })
+
+    // Initial health check on page load
     window.addEventListener("DOMContentLoaded", () => {
-      initSessions()
+      checkBackendStatus()
     })
   </script>
 </body>

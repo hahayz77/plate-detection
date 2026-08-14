@@ -1,35 +1,43 @@
-# Reconhecimento de Placas Veiculares (100% Client-Side)
+# Reconhecimento de Placas Veiculares (FastAPI + PaddleOCR + Docker)
 
-Aplicação web em arquivo único (`index.html`) que executa detecção de placas veiculares (incluindo Mercosul) e OCR dos caracteres utilizando **ONNX Runtime Web** com aceleração WebAssembly (Wasm).
+Aplicação full-stack para detecção e leitura de placas veiculares (incluindo o padrão Mercosul brasileiro e o padrão cinza antigo) utilizando **PaddleOCR** no backend containerizado em Docker e frontend web em HTML/CSS/JavaScript.
 
-## Arquitetura e Modelos
+## Estrutura do Projeto
 
-1. **Detecção (YOLOv8)**:
-   - Pré-processamento com Letterboxing ($640 \times 640$) e normalização $[0, 1]$.
-   - Pós-processamento com conversão de coordenadas para o canvas original e **NMS (Non-Maximum Suppression)**.
-   - Desenho da Bounding Box e score no `<canvas>`.
-
-2. **OCR (CRNN + Decodificação CTC)**:
-   - Recorte da região da placa no canvas e redimensionamento proporcional ($168 \times 48$).
-   - Normalização em tensores NCHW.
-   - Algoritmo de **Greedy Search CTC** em JavaScript puro com eliminação de tokens duplicados e remoção de blanks para reconstrução dos caracteres.
-
-## Como Baixar os Modelos e Executar
-
-1. **Baixar os Modelos ONNX**:
-```bash
-npm run download:models
-# ou diretamente:
-node download_models.js
+```
+plate-detection/
+├── api/
+│   ├── Dockerfile            # Container Python 3.10-slim com OpenCV e PaddleOCR
+│   ├── requirements.txt      # Dependências Python da API
+│   └── main.py               # API FastAPI com endpoint POST /detect
+├── docker-compose.yml        # Orquestração do container da API
+├── index.html                # Frontend web interativo
+├── package.json              # Scripts para servir o frontend
+└── README.md                 # Documentação
 ```
 
-2. **Servir a Aplicação Web**:
+---
+
+## Como Executar
+
+### 1. Iniciar o Backend (Docker)
+
+No terminal da raiz do projeto, execute:
+
+```bash
+docker compose up --build
+```
+
+A API estará disponível em `http://localhost:8000` (documentação interativa Swagger em `http://localhost:8000/docs`).
+
+### 2. Abrir o Frontend
+
+Abra o arquivo [`index.html`](index.html) no navegador ou inicie um servidor local:
+
 ```bash
 npm start
-# ou:
+# ou
 npx serve .
 ```
 
-Abra `http://localhost:3000` (ou a porta informada pelo `serve`) no navegador, carregue a imagem ou use a câmera para detectar e reconhecer placas.
-
-# plate-detection
+Envie qualquer foto de veículo com placa para visualizar a demarcação no canvas e o texto decodificado.
